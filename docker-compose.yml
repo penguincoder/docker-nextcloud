@@ -1,0 +1,90 @@
+version: '3'
+
+services:
+  db:
+    image: postgres:10.4-alpine
+    restart: always
+    volumes:
+      - /cistern/nextcloud/postgres:/var/lib/postgresql/data
+    env_file:
+      - db.env
+
+  redis:
+    image: redis:4.0.9-alpine
+    restart: always
+
+  app:
+    build: ./app
+    restart: always
+    volumes:
+      - /cistern/nextcloud/html:/var/www/html
+    environment:
+      - POSTGRES_HOST=db
+    env_file:
+      - db.env
+    depends_on:
+      - db
+
+  cron:
+    build: ./app
+    restart: always
+    volumes:
+      - /cistern/nextcloud/html:/var/www/html
+    entrypoint: /cron.sh
+    depends_on:
+      - db
+      - redis
+
+  web:
+    build: ./web
+    restart: always
+    volumes:
+      - /cistern/nextcloud/html:/var/www/html
+    environment:
+      - VIRTUAL_HOST=cloud.penguincoder.org
+      - LETSENCRYPT_HOST=cloud.penguincoder.org
+      - LETSENCRYPT_EMAIL=penguincoder@gmail.com
+    depends_on:
+      - app
+    networks:
+      - proxy-tier
+      - default
+
+  proxy:
+    build: ./proxy
+    restart: always
+    ports:
+      - 80:80
+      - 443:443
+    labels:
+      com.github.jrcs.letsencrypt_nginx_proxy_companion.nginx_proxy: "true"
+    volumes:
+      - certs:/etc/nginx/certs:ro
+      - conf.d:/etc/nginx/conf.d
+      - vhost.d:/etc/nginx/vhost.d
+      - /cistern/nextcloud/nginx/html:/usr/share/nginx/html
+      - /var/run/docker.sock:/tmp/docker.sock:ro
+    networks:
+      - proxy-tier
+
+  letsencrypt-companion:
+    image: jrcs/letsencrypt-nginx-proxy-companion
+    restart: always
+    volumes:
+      - certs:/etc/nginx/certs
+      - conf.d:/etc/nginx/conf.d
+      - vhost.d:/etc/nginx/vhost.d
+      - /cistern/nextcloud/nginx/html:/usr/share/nginx/html
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - proxy-tier
+    depends_on:
+      - proxy
+
+volumes:
+  certs:
+  conf.d:
+  vhost.d:
+
+networks:
+  proxy-tier:
