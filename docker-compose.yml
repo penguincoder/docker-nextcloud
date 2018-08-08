@@ -1,4 +1,4 @@
-version: '3'
+version: '3.3'
 
 services:
   db:
@@ -24,6 +24,10 @@ services:
       - db.env
     depends_on:
       - db
+    deploy:
+      endpoint_mode: vip
+      mode: replicated
+      replicas: 4
 
   cron:
     build: ./app
